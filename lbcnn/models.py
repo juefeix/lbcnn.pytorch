@@ -34,18 +34,24 @@ class RandomBinaryConv(nn.Module):
         index = np.random.choice(num_elements, int(sparsity * num_elements))
         weight[index] = torch.bernoulli(torch.ones_like(weight)[index] * 0.5) * 2 - 1
         weight = weight.view((out_channels, in_channels * kernel_size * kernel_size)).t()
-        weight = weight.transpose(0, 1).astype(torch.bool)
-        self.register_buffer('weight', weight)
+        weight = weight.transpose(0, 1)
+        pos_weight = (weight == 1).astype(torch.bool)
+        neg_weigth = (weight == -1).astype(torch.bool)
+        self.register_buffer('pos_weight', pos_weight)
+        self.register_buffer('neg_weigth', neg_weigth)
         self.unfold = nn.Unfold(kernel_size=kernel_size, padding=kernel_size // 2,
                                 stride=stride)
 
     def forward(self, x):
         b, _, h, w = x.shape
         input = self.unfold(x).transpose(1, 2)[..., None] # N HW CKK 1
-        input = torch.where(self.weight[None, None, -1, self.out_channels],
-                            input, torch.zeros_like(input)) # N HW CKK O
-        input = torch.sum(input, dim=-2, keepdim=False)
-        output = input.view((b, self.out_channels, h, w))
+        pos_input = torch.where(self.pos_weight[None, None, -1, self.out_channels],
+                                input, torch.zeros_like(input)) # N HW CKK O
+        neg_input = torch.where(self.neg_weight[None, None, -1, self.out_channels],
+                                input, torch.zeros_like(input)) # N HW CKK O
+        pos_input = torch.sum(pos_input, dim=-2, keepdim=False)
+        neg_input = torch.sum(neg_input, dim=-2, keepdim=False)
+        output = (pos_input - neg_input).view((b, self.out_channels, h, w))
         return output
 
 
