@@ -18,6 +18,42 @@ class RandomBinaryConv(nn.Module):
                  bias=False,
                  seed=1234):
         """
+        TODO(zcq) Write a cuda/c++ version.
+
+        Parameters
+        ----------
+        sparsity : float
+
+        """
+        self.out_channels = out_channels
+        self.in_channels = in_channels
+        self.stride = stride
+        self.kernel_size = kernel_size
+        num_elements = out_channels * in_channels * kernel_size * kernel_size
+        assert not bias, "bias=True not supported"
+        weight = torch.zeros((num_elements, ), requires_grad=False).float()
+        index = np.random.choice(num_elements, int(sparsity * num_elements))
+        weight[index] = torch.bernoulli(torch.ones_like(weight)[index] * 0.5) * 2 - 1
+        weight = weight.view((out_channels, in_channels, kernel_size, kernel_size))
+        self.register_buffer('weight', weight)
+
+    def forward(self, x):
+        return F.Conv2d(x, self.weight, stride=self.stride, padding=self.kernel_size // 2)
+
+
+class RandomBinaryConvV1(nn.Module):
+    """Random Binary Convolution.
+    
+    See Local Binary Convolutional Neural Networks.
+    """
+    def __init__(self, in_channels,
+                 out_channels,
+                 kernel_size,
+                 stride=1,
+                 sparsity=0.9,
+                 bias=False,
+                 seed=1234):
+        """
 
         TODO(zcq) Write a cuda/c++ version.
 
