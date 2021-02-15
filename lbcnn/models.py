@@ -25,6 +25,7 @@ class RandomBinaryConv(nn.Module):
         sparsity : float
 
         """
+        super().__init__()
         self.out_channels = out_channels
         self.in_channels = in_channels
         self.stride = stride
@@ -38,7 +39,8 @@ class RandomBinaryConv(nn.Module):
         self.register_buffer('weight', weight)
 
     def forward(self, x):
-        return F.Conv2d(x, self.weight, stride=self.stride, padding=self.kernel_size // 2)
+        return F.conv2d(x, self.weight, stride=self.stride,
+                        padding=self.kernel_size // 2)
 
 
 class RandomBinaryConvV1(nn.Module):
@@ -62,6 +64,7 @@ class RandomBinaryConvV1(nn.Module):
         sparsity : float
 
         """
+        super().__init__()
         self.out_channels = out_channels
         self.in_channels = in_channels
         num_elements = out_channels * in_channels * kernel_size * kernel_size
@@ -71,8 +74,8 @@ class RandomBinaryConvV1(nn.Module):
         weight[index] = torch.bernoulli(torch.ones_like(weight)[index] * 0.5) * 2 - 1
         weight = weight.view((out_channels, in_channels * kernel_size * kernel_size)).t()
         weight = weight.transpose(0, 1)
-        pos_weight = (weight == 1).astype(torch.bool)
-        neg_weigth = (weight == -1).astype(torch.bool)
+        pos_weight = (weight == 1).type(torch.bool)
+        neg_weigth = (weight == -1).type(torch.bool)
         self.register_buffer('pos_weight', pos_weight)
         self.register_buffer('neg_weigth', neg_weigth)
         self.unfold = nn.Unfold(kernel_size=kernel_size, padding=kernel_size // 2,
@@ -103,6 +106,7 @@ class LBConv(nn.Module):
                  act=F.relu):
         """Use this to replace a conv + activation.
         """
+        super().__init__()
         self.random_binary_conv = RandomBinaryConv(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -111,12 +115,46 @@ class LBConv(nn.Module):
             sparsity=sparsity,
             seed=seed)
         # self.bn = nn.BatchNorm2d(in_channels)
-        self.fc = nn.Conv2d(out_channels, in_channels, 1, 1)
+        self.fc = nn.Conv2d(out_channels, out_channels, 1, 1)
         self.act = act
 
     def forward(self, x):
         # y = self.bn(x)
         y = self.random_binary_conv(x)
-        y = self.relu(y)
+        if self.act is not None:
+            y = self.act(y)
+        y = self.fc(y)
+        return y
+
+
+class LBConvBN(nn.Module):
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size=3,
+                 stride=1,
+                 sparsity=0.9,
+                 bias=False,
+                 seed=1234,
+                 act=F.relu):
+        """Use this to replace a conv + activation.
+        """
+        super().__init__()
+        self.random_binary_conv = RandomBinaryConv(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            sparsity=sparsity,
+            seed=seed)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.fc = nn.Conv2d(out_channels, out_channels, 1, 1)
+        self.act = act
+
+    def forward(self, x):
+        y = self.random_binary_conv(x)
+        y = self.bn(y)
+        if self.act is not None:
+            y = self.act(y)
         y = self.fc(y)
         return y
