@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from lbcnn import LBConv, LBConvBN
-sparsity = 0.5
+sparsity = 0.1
 
 cfg = {
     'VGG11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
@@ -33,11 +33,11 @@ class VGG(nn.Module):
             if x == 'M':
                 layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
             else:
-                # layers += [nn.Conv2d(in_channels, x, kernel_size=3, padding=1),
-                #            nn.BatchNorm2d(x),
-                #            nn.ReLU(inplace=True)]
-                layers += [LBConvBN(in_channels, x, sparsity=sparsity, 
-                                    kernel_size=3, stride=1, act=F.relu)]
+                layers += [nn.Conv2d(in_channels, x, kernel_size=3, padding=1),
+                           nn.BatchNorm2d(x),
+                           nn.ReLU(inplace=True)]
+                # layers += [LBConvBN(in_channels, x, sparsity=sparsity, 
+                #                     kernel_size=3, stride=1, act=F.relu)]
                 in_channels = x
         layers += [nn.AvgPool2d(kernel_size=1, stride=1)]
         return nn.Sequential(*layers)

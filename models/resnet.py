@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 
 from lbcnn import LBConv, LBConvBN
-sparsity = 0.1
+sparsity = 0.9
 
 
 class BasicBlock(nn.Module):
