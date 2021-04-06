@@ -49,13 +49,7 @@ sh run.sh 0,1,2,3 resnet101 512
 
 and  
 
-* Felix Juefei-Xu, Changqing Zhou, Vishnu Naresh Boddeti, and Marios Savvides, [**Local Binary Convolutional Neural Networks and Beyond**],
-* Work in Progress, 2021*.
+* Felix Juefei-Xu, Changqing Zhou, Vishnu Naresh Boddeti, and Marios Savvides, **Local Binary Convolutional Neural Networks and Beyond**,
+* Work in Progress, 2021.
 
-* @inproceedings{juefei-xu2021lbcnn,<br>
-&nbsp;&nbsp;&nbsp;title={{Local Binary Convolutional Neural Networks and Beyond}},<br>
-&nbsp;&nbsp;&nbsp;author={Felix Juefei-Xu and Changqing Zhou and Vishnu Naresh Boddeti and Marios Savvides},<br>
-&nbsp;&nbsp;&nbsp;booktitle={WIP},<br>
-&nbsp;&nbsp;&nbsp;year={2021}<br>
-}
 
