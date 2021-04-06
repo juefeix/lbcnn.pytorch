@@ -5,7 +5,8 @@ from .utils import load_state_dict_from_url
 from typing import Type, Any, Callable, Union, List, Optional
 
 from lbcnn import LBConv, LBConvBN
-sparsity = 0.9
+sparsity = 0.1
+m = 9
 
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
@@ -121,10 +122,10 @@ class Bottleneck(nn.Module):
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv1x1(inplanes, width)
         self.bn1 = norm_layer(width)
-        self.conv2 = conv3x3(width, width, stride, groups, dilation)
-        self.bn2 = norm_layer(width)
+        # self.conv2 = conv3x3(width, width, stride, groups, dilation)
+        # self.bn2 = norm_layer(width)
 
-        # self.conv2 = LBConvBN(width, width, stride=stride, sparsity=sparsity)
+        self.conv2 = LBConvBN(width, width, stride=stride, sparsity=sparsity, m=m)
 
         self.conv3 = conv1x1(width, planes * self.expansion)
         self.bn3 = norm_layer(planes * self.expansion)
@@ -139,11 +140,11 @@ class Bottleneck(nn.Module):
         out = self.bn1(out)
         out = self.relu(out)
 
-        # out = self.conv2(out)
-
         out = self.conv2(out)
-        out = self.bn2(out)
-        out = self.relu(out)
+
+        # out = self.conv2(out)
+        # out = self.bn2(out)
+        # out = self.relu(out)
 
         out = self.conv3(out)
         out = self.bn3(out)
