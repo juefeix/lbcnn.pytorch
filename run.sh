@@ -21,8 +21,10 @@ python main.py -a $MODEL \
     --multiprocessing-distributed \
     --world-size 1 \
     --rank 0 \
+    --resume checkpoint.pth.tar \
     -b $BATCH_SIZE \
     $IMAGENET_DIR
     # 2>&1 | tee $MODEL.log
 
 cp checkpoint/ckpt.pth checkpoint/$MODEL.ckpt.pth
+
