@@ -1,6 +1,3 @@
 [submodule "mmcv"]
 	path = mmcv
 	url = ./mmcv
-[submodule "mmdetection"]
-	path = mmdetection
-	url = ./mmdetection
