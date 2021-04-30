@@ -16,6 +16,9 @@ class RandomBinaryConv(nn.Module):
                  stride=1,
                  sparsity=0.9,
                  bias=False,
+                 padding=0,
+                 groups=1,
+                 dilation=1,
                  seed=1234):
         """
         TODO(zcq) Write a cuda/c++ version.
@@ -30,6 +33,9 @@ class RandomBinaryConv(nn.Module):
         self.in_channels = in_channels
         self.stride = stride
         self.kernel_size = kernel_size
+        self.padding = padding
+        self.dilation = dilation
+        self.groups = groups
         num_elements = out_channels * in_channels * kernel_size * kernel_size
         assert not bias, "bias=True not supported"
         weight = torch.zeros((num_elements, ), requires_grad=False).float()
@@ -40,7 +46,8 @@ class RandomBinaryConv(nn.Module):
 
     def forward(self, x):
         return F.conv2d(x, self.weight, stride=self.stride,
-                        padding=self.kernel_size // 2)
+                        padding=self.padding, dilation=self.dilation,
+                        groups=self.groups)
 
 
 class RandomBinaryConvV1(nn.Module):
@@ -54,6 +61,9 @@ class RandomBinaryConvV1(nn.Module):
                  stride=1,
                  sparsity=0.9,
                  bias=False,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
                  seed=1234):
         """
 
@@ -78,8 +88,8 @@ class RandomBinaryConvV1(nn.Module):
         neg_weigth = (weight == -1).type(torch.bool)
         self.register_buffer('pos_weight', pos_weight)
         self.register_buffer('neg_weigth', neg_weigth)
-        self.unfold = nn.Unfold(kernel_size=kernel_size, padding=kernel_size // 2,
-                                stride=stride)
+        self.unfold = nn.Unfold(kernel_size=kernel_size, padding=padding,
+                                stride=stride, dilation=dilation)
 
     def forward(self, x):
         b, _, h, w = x.shape
@@ -136,17 +146,33 @@ class LBConvBN(nn.Module):
                  sparsity=0.9,
                  bias=False,
                  seed=1234,
+                 padding=1,
+                 dilation=1,
+                 groups=1,
                  act=F.relu):
         """Use this to replace a conv + activation.
         """
         super().__init__()
+        # assert padding == kernel_size // 2, "kernel_size: %d, padding: %d" % (kernel_size, padding)
+        # assert dilation == 1, dilation
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.transposed = False
+        self.output_padding = 0
+        self.dilation = dilation
+        self.groups = groups
         self.random_binary_conv = RandomBinaryConv(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
             sparsity=sparsity,
-            seed=seed)
+            seed=seed,
+            dilation=dilation,
+            groups=groups,
+            padding=padding)
         self.bn = nn.BatchNorm2d(out_channels)
         self.fc = nn.Conv2d(out_channels, out_channels, 1, 1)
         self.act = act
