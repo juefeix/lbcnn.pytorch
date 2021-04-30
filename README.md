@@ -77,7 +77,8 @@ python setup.py develop
 Then follow mmseg's documentation to run normal segmentation training or run following script to run lbcnn version
 
 ```sh
-PYTHONPATH='/mnt/nvme/zcq/git/lbcnn' CUDA_VISIBLE_DEVICES=7 USE_LBCNN=1 ./tools/dist_train.sh configs/fcn/fcn_r50-d8_512x1024_80k_cityscapes.lbcnn.py 1
+cd mmsegmentation
+PYTHONPATH=${LBCNN_GIT_PATH} CUDA_VISIBLE_DEVICES=6,7 USE_LBCNN=1 ./tools/dist_train.sh configs/fcn/fcn_r50-d8_512x1024_80k_cityscapes.lbcnn.py 2
 ```
 
 
