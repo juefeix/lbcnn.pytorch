@@ -5,6 +5,9 @@ from mmcv.cnn import ConvModule
 from ..builder import HEADS
 from .decode_head import BaseDecodeHead
 
+import os
+USE_LBCNN = os.environ.get('USE_LBCNN', False)
+
 
 @HEADS.register_module()
 class FCNHead(BaseDecodeHead):
@@ -36,20 +39,10 @@ class FCNHead(BaseDecodeHead):
 
         conv_padding = (kernel_size // 2) * dilation
         convs = []
-        convs.append(
-            ConvModule(
-                self.in_channels,
-                self.channels,
-                kernel_size=kernel_size,
-                padding=conv_padding,
-                dilation=dilation,
-                conv_cfg=self.conv_cfg,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg))
-        for i in range(num_convs - 1):
+        if not USE_LBCNN or kernel_size == 1:
             convs.append(
                 ConvModule(
-                    self.channels,
+                    self.in_channels,
                     self.channels,
                     kernel_size=kernel_size,
                     padding=conv_padding,
@@ -57,19 +50,61 @@ class FCNHead(BaseDecodeHead):
                     conv_cfg=self.conv_cfg,
                     norm_cfg=self.norm_cfg,
                     act_cfg=self.act_cfg))
+        else:
+            convs.append(
+                ConvModule(
+                    self.in_channels,
+                    self.channels,
+                    kernel_size=kernel_size,
+                    padding=conv_padding,
+                    dilation=dilation,
+                    conv_cfg=dict(type='LBConvBN')))
+
+        for i in range(num_convs - 1):
+            if not USE_LBCNN or kernel_size == 1:
+                convs.append(
+                    ConvModule(
+                        self.channels,
+                        self.channels,
+                        kernel_size=kernel_size,
+                        padding=conv_padding,
+                        dilation=dilation,
+                        conv_cfg=self.conv_cfg,
+                        norm_cfg=self.norm_cfg,
+                        act_cfg=self.act_cfg))
+            else:
+                convs.append(
+                    ConvModule(
+                        self.channels,
+                        self.channels,
+                        kernel_size=kernel_size,
+                        padding=conv_padding,
+                        dilation=dilation,
+                        conv_cfg=dict(type='LBConvBN'),
+                        act_cfg=None))
+
         if num_convs == 0:
             self.convs = nn.Identity()
         else:
             self.convs = nn.Sequential(*convs)
         if self.concat_input:
-            self.conv_cat = ConvModule(
-                self.in_channels + self.channels,
-                self.channels,
-                kernel_size=kernel_size,
-                padding=kernel_size // 2,
-                conv_cfg=self.conv_cfg,
-                norm_cfg=self.norm_cfg,
-                act_cfg=self.act_cfg)
+            if not USE_LBCNN or kernel_size == 1:
+                self.conv_cat = ConvModule(
+                    self.in_channels + self.channels,
+                    self.channels,
+                    kernel_size=kernel_size,
+                    padding=kernel_size // 2,
+                    conv_cfg=self.conv_cfg,
+                    norm_cfg=self.norm_cfg,
+                    act_cfg=self.act_cfg)
+            else:
+                self.conv_cat = ConvModule(
+                    self.in_channels + self.channels,
+                    self.channels,
+                    kernel_size=kernel_size,
+                    padding=kernel_size // 2,
+                    conv_cfg=dict(type='LBConvBN'),
+                    act_cfg=None)
 
     def forward(self, inputs):
         """Forward function."""

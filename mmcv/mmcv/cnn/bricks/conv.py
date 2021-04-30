@@ -1,6 +1,13 @@
 from torch import nn
 
+import os
+
 from .registry import CONV_LAYERS
+
+if os.environ.get('USE_LBCNN', False):
+    from lbcnn import LBConv, LBConvBN
+    CONV_LAYERS.register_module('LBConv', module=LBConv)
+    CONV_LAYERS.register_module('LBConvBN', module=LBConvBN)
 
 CONV_LAYERS.register_module('Conv1d', module=nn.Conv1d)
 CONV_LAYERS.register_module('Conv2d', module=nn.Conv2d)
