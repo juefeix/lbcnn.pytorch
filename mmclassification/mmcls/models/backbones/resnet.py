@@ -7,6 +7,7 @@ from mmcv.utils.parrots_wrapper import _BatchNorm
 from ..builder import BACKBONES
 from .base_backbone import BaseBackbone
 
+USE_LBCNN = os.environ.get('USE_LBCNN', False)
 
 class BasicBlock(nn.Module):
     """BasicBlock for ResNet.
@@ -178,8 +179,9 @@ class Bottleneck(nn.Module):
 
         self.norm1_name, norm1 = build_norm_layer(
             norm_cfg, self.mid_channels, postfix=1)
-        self.norm2_name, norm2 = build_norm_layer(
-            norm_cfg, self.mid_channels, postfix=2)
+        if not USE_LBCNN:
+            self.norm2_name, norm2 = build_norm_layer(
+                norm_cfg, self.mid_channels, postfix=2)
         self.norm3_name, norm3 = build_norm_layer(
             norm_cfg, out_channels, postfix=3)
 
@@ -192,7 +194,7 @@ class Bottleneck(nn.Module):
             bias=False)
         self.add_module(self.norm1_name, norm1)
         self.conv2 = build_conv_layer(
-            conv_cfg,
+            conv_cfg if not USE_LBCNN else dict(type='LBConvBN'),
             self.mid_channels,
             self.mid_channels,
             kernel_size=3,
@@ -201,7 +203,8 @@ class Bottleneck(nn.Module):
             dilation=dilation,
             bias=False)
 
-        self.add_module(self.norm2_name, norm2)
+        if not USE_LBCNN:
+            self.add_module(self.norm2_name, norm2)
         self.conv3 = build_conv_layer(
             conv_cfg,
             self.mid_channels,
@@ -234,9 +237,12 @@ class Bottleneck(nn.Module):
             out = self.norm1(out)
             out = self.relu(out)
 
-            out = self.conv2(out)
-            out = self.norm2(out)
-            out = self.relu(out)
+            if USE_LBCNN:
+                out = self.conv2(out)
+            else:
+                out = self.conv2(out)
+                out = self.norm2(out)
+                out = self.relu(out)
 
             out = self.conv3(out)
             out = self.norm3(out)
@@ -463,6 +469,10 @@ class ResNet(BaseBackbone):
         super(ResNet, self).__init__()
         if depth not in self.arch_settings:
             raise KeyError(f'invalid depth {depth} for resnet')
+
+        if USE_LBCNN:
+            assert depth >= 50
+
         self.depth = depth
         self.stem_channels = stem_channels
         self.base_channels = base_channels
@@ -526,47 +536,75 @@ class ResNet(BaseBackbone):
 
     def _make_stem_layer(self, in_channels, stem_channels):
         if self.deep_stem:
-            self.stem = nn.Sequential(
-                ConvModule(
-                    in_channels,
-                    stem_channels // 2,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    conv_cfg=self.conv_cfg,
-                    norm_cfg=self.norm_cfg,
-                    inplace=True),
-                ConvModule(
-                    stem_channels // 2,
-                    stem_channels // 2,
-                    kernel_size=3,
-                    stride=1,
-                    padding=1,
-                    conv_cfg=self.conv_cfg,
-                    norm_cfg=self.norm_cfg,
-                    inplace=True),
-                ConvModule(
-                    stem_channels // 2,
-                    stem_channels,
-                    kernel_size=3,
-                    stride=1,
-                    padding=1,
-                    conv_cfg=self.conv_cfg,
-                    norm_cfg=self.norm_cfg,
-                    inplace=True))
+            if not USE_LBCNN:
+                self.stem = nn.Sequential(
+                    ConvModule(
+                        in_channels,
+                        stem_channels // 2,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        conv_cfg=self.conv_cfg,
+                        norm_cfg=self.norm_cfg,
+                        inplace=True),
+                    ConvModule(
+                        stem_channels // 2,
+                        stem_channels // 2,
+                        kernel_size=3,
+                        stride=1,
+                        padding=1,
+                        conv_cfg=self.conv_cfg,
+                        norm_cfg=self.norm_cfg,
+                        inplace=True),
+                    ConvModule(
+                        stem_channels // 2,
+                        stem_channels,
+                        kernel_size=3,
+                        stride=1,
+                        padding=1,
+                        conv_cfg=self.conv_cfg,
+                        norm_cfg=self.norm_cfg,
+                        inplace=True))
+            else:
+                self.stem = nn.Sequential(
+                    build_conv_layer(
+                        dict(type='LBConvBN'),
+                        in_channels,
+                        stem_channels // 2,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        bias=False),
+                    build_conv_layer(
+                        dict(type='LBConvBN'),
+                        stem_channels // 2,
+                        stem_channels // 2,
+                        kernel_size=3,
+                        stride=1,
+                        padding=1,
+                        bias=False),
+                    build_conv_layer(
+                        dict(type='LBConvBN'),
+                        stem_channels // 2,
+                        stem_channels,
+                        kernel_size=3,
+                        stride=1,
+                        padding=1,
+                        bias=False))
         else:
             self.conv1 = build_conv_layer(
-                self.conv_cfg,
+                self.conv_cfg if not USE_LBCNN else dict(type='LBConvBN'),
                 in_channels,
                 stem_channels,
                 kernel_size=7,
                 stride=2,
                 padding=3,
                 bias=False)
-            self.norm1_name, norm1 = build_norm_layer(
-                self.norm_cfg, stem_channels, postfix=1)
-            self.add_module(self.norm1_name, norm1)
-            self.relu = nn.ReLU(inplace=True)
+            if not USE_LBCNN:
+                self.norm1_name, norm1 = build_norm_layer(
+                    self.norm_cfg, stem_channels, postfix=1)
+                self.add_module(self.norm1_name, norm1)
+                self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
     def _freeze_stages(self):
@@ -607,9 +645,12 @@ class ResNet(BaseBackbone):
         if self.deep_stem:
             x = self.stem(x)
         else:
-            x = self.conv1(x)
-            x = self.norm1(x)
-            x = self.relu(x)
+            if not USE_LBCNN:
+                x = self.conv1(x)
+                x = self.norm1(x)
+                x = self.relu(x)
+            else:
+                x = self.conv1(x)
         x = self.maxpool(x)
         outs = []
         for i, layer_name in enumerate(self.res_layers):
