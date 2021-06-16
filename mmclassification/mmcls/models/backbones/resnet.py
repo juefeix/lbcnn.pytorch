@@ -7,7 +7,9 @@ from mmcv.utils.parrots_wrapper import _BatchNorm
 from ..builder import BACKBONES
 from .base_backbone import BaseBackbone
 
+import os
 USE_LBCNN = os.environ.get('USE_LBCNN', False)
+
 
 class BasicBlock(nn.Module):
     """BasicBlock for ResNet.
