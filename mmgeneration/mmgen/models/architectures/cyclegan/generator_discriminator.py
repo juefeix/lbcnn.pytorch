@@ -7,6 +7,8 @@ from mmgen.models.builder import MODULES
 from mmgen.utils import get_root_logger
 from .modules import ResidualBlockWithDropout
 
+import os
+USE_LBCNN = os.environ.get('USE_LBCNN', False)
 
 @MODULES.register_module()
 class ResnetGenerator(nn.Module):
@@ -50,31 +52,62 @@ class ResnetGenerator(nn.Module):
         use_bias = norm_cfg['type'] == 'IN'
 
         model = []
-        model += [
-            ConvModule(
-                in_channels=in_channels,
-                out_channels=base_channels,
-                kernel_size=7,
-                padding=3,
-                bias=use_bias,
-                norm_cfg=norm_cfg,
-                padding_mode=padding_mode)
-        ]
+
+        if USE_LBCNN:
+            model += [
+                ConvModule(
+                    in_channels=in_channels,
+                    out_channels=base_channels,
+                    kernel_size=7,
+                    padding=3,
+                    bias=use_bias,
+                    norm_cfg=None,
+                    padding_mode=padding_mode,
+                    conv_cfg=dict(type='LBConvBN',
+                                  norm_type=norm_cfg['type'].lower()),
+                    act_cfg=None)
+            ]
+        else:
+            model += [
+                ConvModule(
+                    in_channels=in_channels,
+                    out_channels=base_channels,
+                    kernel_size=7,
+                    padding=3,
+                    bias=use_bias,
+                    norm_cfg=norm_cfg,
+                    padding_mode=padding_mode)
+            ]
 
         num_down = 2
         # add downsampling layers
         for i in range(num_down):
             multiple = 2**i
-            model += [
-                ConvModule(
-                    in_channels=base_channels * multiple,
-                    out_channels=base_channels * multiple * 2,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    bias=use_bias,
-                    norm_cfg=norm_cfg)
-            ]
+            if USE_LBCNN:
+                model += [
+                    ConvModule(
+                        in_channels=base_channels * multiple,
+                        out_channels=base_channels * multiple * 2,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        bias=use_bias,
+                        norm_cfg=None,
+                        conv_cfg=dict(type='LBConvBN',
+                                      norm_type=norm_cfg['type'].lower()),
+                        act_cfg=None)
+                ]
+            else:
+                model += [
+                    ConvModule(
+                        in_channels=base_channels * multiple,
+                        out_channels=base_channels * multiple * 2,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        bias=use_bias,
+                        norm_cfg=norm_cfg)
+                ]
 
         # add residual blocks
         multiple = 2**num_down
@@ -90,29 +123,64 @@ class ResnetGenerator(nn.Module):
         # add upsampling layers
         for i in range(num_down):
             multiple = 2**(num_down - i)
+
+            if USE_LBCNN:
+                model += [
+                    ConvModule(
+                        in_channels=base_channels * multiple,
+                        out_channels=base_channels * multiple // 2,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        bias=use_bias,
+                        conv_cfg=dict(type='LBConvBN',
+                                      output_padding=1,
+                                      deconv=True,
+                                      norm_type=norm_cfg['type'].lower()),
+                        norm_cfg=None,
+                        act_cfg=None)
+                ]
+            else:
+                model += [
+                    ConvModule(
+                        in_channels=base_channels * multiple,
+                        out_channels=base_channels * multiple // 2,
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        bias=use_bias,
+                        conv_cfg=dict(type='deconv', output_padding=1),
+                        norm_cfg=norm_cfg)
+                ]
+
+        if USE_LBCNN:
             model += [
                 ConvModule(
-                    in_channels=base_channels * multiple,
-                    out_channels=base_channels * multiple // 2,
-                    kernel_size=3,
-                    stride=2,
-                    padding=1,
-                    bias=use_bias,
-                    conv_cfg=dict(type='deconv', output_padding=1),
-                    norm_cfg=norm_cfg)
+                    in_channels=base_channels,
+                    out_channels=out_channels,
+                    kernel_size=7,
+                    padding=3,
+                    bias=True,
+                    norm_cfg=None,
+                    act_cfg=None, # dict(type='Tanh'),
+                    padding_mode=padding_mode,
+                    conv_cfg=dict(type='LBConvBN',
+                                  norm_type=None,
+                                  act=nn.functional.tanh)
+                )
             ]
-
-        model += [
-            ConvModule(
-                in_channels=base_channels,
-                out_channels=out_channels,
-                kernel_size=7,
-                padding=3,
-                bias=True,
-                norm_cfg=None,
-                act_cfg=dict(type='Tanh'),
-                padding_mode=padding_mode)
-        ]
+        else:
+            model += [
+                ConvModule(
+                    in_channels=base_channels,
+                    out_channels=out_channels,
+                    kernel_size=7,
+                    padding=3,
+                    bias=True,
+                    norm_cfg=None,
+                    act_cfg=dict(type='Tanh'),
+                    padding_mode=padding_mode)
+            ]
 
         self.model = nn.Sequential(*model)
         self.init_type = 'normal' if init_cfg is None else init_cfg.get(

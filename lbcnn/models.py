@@ -19,7 +19,9 @@ class RandomBinaryConv(nn.Module):
                  padding=0,
                  groups=1,
                  dilation=1,
-                 seed=1234):
+                 seed=1234,
+                 deconv=False,
+                 output_padding=0):
         """
         TODO(zcq) Write a cuda/c++ version.
 
@@ -36,6 +38,7 @@ class RandomBinaryConv(nn.Module):
         self.padding = padding
         self.dilation = dilation
         self.groups = groups
+        self.output_padding = output_padding
         num_elements = out_channels * in_channels * kernel_size * kernel_size
         assert not bias, "bias=True not supported"
         weight = torch.zeros((num_elements, ), requires_grad=False).float()
@@ -44,10 +47,17 @@ class RandomBinaryConv(nn.Module):
         weight = weight.view((out_channels, in_channels, kernel_size, kernel_size))
         self.register_buffer('weight', weight)
 
+        self.deconv = deconv
+
     def forward(self, x):
-        return F.conv2d(x, self.weight, stride=self.stride,
-                        padding=self.padding, dilation=self.dilation,
-                        groups=self.groups)
+        if self.deconv:
+            return F.conv_transpose2d(x, self.weight, stride=self.stride,
+                                      padding=self.padding, dilation=self.dilation,
+                                      groups=self.groups, output_padding=self.output_padding)
+        else:
+            return F.conv2d(x, self.weight, stride=self.stride,
+                            padding=self.padding, dilation=self.dilation,
+                            groups=self.groups)
 
 
 class RandomBinaryConvV1(nn.Module):
@@ -150,7 +160,9 @@ class LBConvBN(nn.Module):
                  dilation=1,
                  groups=1,
                  act=F.relu,
-                 norm_type='bn'):
+                 norm_type='bn',
+                 output_padding=0,
+                 deconv=False):
         """Use this to replace a conv + activation.
         """
         super().__init__()
@@ -173,20 +185,35 @@ class LBConvBN(nn.Module):
             seed=seed,
             dilation=dilation,
             groups=groups,
-            padding=padding)
-        if norm_type == 'bn':
+            padding=padding,
+            deconv=deconv,
+            output_padding=output_padding)
+        if norm_type is None:
+            self.bn = None
+        elif norm_type == 'bn':
             self.bn = nn.BatchNorm2d(out_channels)
         elif norm_type == 'in':
             self.bn = nn.InstanceNorm2d(out_channels)
         else:
             raise ValueError("%s not supported" % norm_type)
+
         self.fc = nn.Conv2d(out_channels, out_channels, 1, 1)
         self.act = act
 
+        if bias:
+            self.bias = nn.Parameter(
+                torch.Tensor((out_channels, )), requires_grad=True)
+        else:
+            self.bias = None
+
     def forward(self, x):
         y = self.random_binary_conv(x)
-        y = self.bn(y)
+        if self.bn is not None:
+            y = self.bn(y)
         if self.act is not None:
             y = self.act(y)
         y = self.fc(y)
+
+        if self.bias is not None:
+            y += self.bias
         return y

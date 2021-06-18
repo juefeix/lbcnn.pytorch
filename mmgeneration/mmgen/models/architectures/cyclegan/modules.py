@@ -1,6 +1,8 @@
 import torch.nn as nn
 from mmcv.cnn import ConvModule
 
+import os
+USE_LBCNN = os.environ.get('USE_LBCNN', False)
 
 class ResidualBlockWithDropout(nn.Module):
     """Define a Residual Block with dropout layers.
@@ -33,31 +35,63 @@ class ResidualBlockWithDropout(nn.Module):
         # Only for IN, use bias to follow cyclegan's original implementation.
         use_bias = norm_cfg['type'] == 'IN'
 
-        block = [
-            ConvModule(
-                in_channels=channels,
-                out_channels=channels,
-                kernel_size=3,
-                padding=1,
-                bias=use_bias,
-                norm_cfg=norm_cfg,
-                padding_mode=padding_mode)
-        ]
+        if USE_LBCNN:
+            block = [
+                ConvModule(
+                    in_channels=channels,
+                    out_channels=channels,
+                    kernel_size=3,
+                    padding=1,
+                    bias=use_bias,
+                    padding_mode=padding_mode,
+                    norm_cfg=None,
+                    conv_cfg=dict(type='LBConvBN',
+                                norm_ype=norm_cfg['type'].lower()),
+                    act_cfg=None)
+            ]
+        else:
+            block = [
+                ConvModule(
+                    in_channels=channels,
+                    out_channels=channels,
+                    kernel_size=3,
+                    padding=1,
+                    bias=use_bias,
+                    norm_cfg=norm_cfg,
+                    padding_mode=padding_mode)
+            ]
 
         if use_dropout:
             block += [nn.Dropout(0.5)]
 
-        block += [
-            ConvModule(
-                in_channels=channels,
-                out_channels=channels,
-                kernel_size=3,
-                padding=1,
-                bias=use_bias,
-                norm_cfg=norm_cfg,
-                act_cfg=None,
-                padding_mode=padding_mode)
-        ]
+        if USE_LBCNN:
+            block += [
+                ConvModule(
+                    in_channels=channels,
+                    out_channels=channels,
+                    kernel_size=3,
+                    padding=1,
+                    bias=use_bias,
+                    act_cfg=None,
+                    padding_mode=padding_mode,
+                    norm_cfg=None,
+                    conv_cfg=dict(type='LBConvBN',
+                                norm_ype=norm_cfg['type'].lower(),
+                                act=None),
+                    act_cfg=None)
+            ]
+        else:
+            block += [
+                ConvModule(
+                    in_channels=channels,
+                    out_channels=channels,
+                    kernel_size=3,
+                    padding=1,
+                    bias=use_bias,
+                    norm_cfg=norm_cfg,
+                    act_cfg=None,
+                    padding_mode=padding_mode)
+            ]
 
         self.block = nn.Sequential(*block)
 
