@@ -149,7 +149,8 @@ class LBConvBN(nn.Module):
                  padding=1,
                  dilation=1,
                  groups=1,
-                 act=F.relu):
+                 act=F.relu,
+                 norm_type='bn'):
         """Use this to replace a conv + activation.
         """
         super().__init__()
@@ -173,7 +174,12 @@ class LBConvBN(nn.Module):
             dilation=dilation,
             groups=groups,
             padding=padding)
-        self.bn = nn.BatchNorm2d(out_channels)
+        if norm_type == 'bn':
+            self.bn = nn.BatchNorm2d(out_channels)
+        elif norm_type == 'in':
+            self.bn = nn.InstanceNorm2d(out_channels)
+        else:
+            raise ValueError("%s not supported" % norm_type)
         self.fc = nn.Conv2d(out_channels, out_channels, 1, 1)
         self.act = act
 
