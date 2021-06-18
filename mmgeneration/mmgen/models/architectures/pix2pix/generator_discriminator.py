@@ -6,6 +6,11 @@ from mmgen.models.builder import MODULES
 from mmgen.utils import get_root_logger
 from .modules import UnetSkipConnectionBlock, generation_init_weights
 
+import os
+USE_LBCNN = os.environ.get('USE_LBCNN', False)
+
+if USE_LBCNN:
+    from mmcv import build_activation_layer
 
 @MODULES.register_module()
 class UnetGenerator(nn.Module):
@@ -161,17 +166,34 @@ class PatchDiscriminator(nn.Module):
         padding = 1
 
         # input layer
-        sequence = [
-            ConvModule(
-                in_channels=in_channels,
-                out_channels=base_channels,
-                kernel_size=kernel_size,
-                stride=2,
-                padding=padding,
-                bias=True,
-                norm_cfg=None,
-                act_cfg=dict(type='LeakyReLU', negative_slope=0.2))
-        ]
+        if USE_LBCNN:
+            sequence = [
+                ConvModule(
+                    in_channels=in_channels,
+                    out_channels=base_channels,
+                    kernel_size=kernel_size,
+                    stride=2,
+                    padding=padding,
+                    bias=True,
+                    norm_cfg=None,
+                    act_cfg=None,
+                    conv_cfg=dict(type='LBConvBN',
+                                  norm_type=None,
+                                  act=build_activation_layer(
+                                      dict(type='LeakyReLU', negative_slope=0.2))),
+                )]
+        else:
+            sequence = [
+                ConvModule(
+                    in_channels=in_channels,
+                    out_channels=base_channels,
+                    kernel_size=kernel_size,
+                    stride=2,
+                    padding=padding,
+                    bias=True,
+                    norm_cfg=None,
+                    act_cfg=dict(type='LeakyReLU', negative_slope=0.2))
+            ]
 
         # stacked intermediate layers,
         # gradually increasing the number of filters
@@ -180,35 +202,75 @@ class PatchDiscriminator(nn.Module):
         for n in range(1, num_conv):
             multiple_prev = multiple_now
             multiple_now = min(2**n, 8)
+
+            if USE_LBCNN:
+                sequence += [
+                    ConvModule(
+                        in_channels=base_channels * multiple_prev,
+                        out_channels=base_channels * multiple_now,
+                        kernel_size=kernel_size,
+                        stride=2,
+                        padding=padding,
+                        bias=use_bias,
+                        norm_cfg=None,
+                        act_cfg=None,
+                        conv_cfg=dict(type='LBConvBN',
+                                      norm_type=norm_cfg['type'].lower(),
+                                      act=build_activation_layer(
+                                            dict(type='LeakyReLU', negative_slope=0.2))),
+                    )]
+
+            else:
+                sequence += [
+                    ConvModule(
+                        in_channels=base_channels * multiple_prev,
+                        out_channels=base_channels * multiple_now,
+                        kernel_size=kernel_size,
+                        stride=2,
+                        padding=padding,
+                        bias=use_bias,
+                        norm_cfg=norm_cfg,
+                        act_cfg=dict(type='LeakyReLU', negative_slope=0.2))
+                ]
+        multiple_prev = multiple_now
+        multiple_now = min(2**num_conv, 8)
+
+        if USE_LBCNN:
             sequence += [
                 ConvModule(
                     in_channels=base_channels * multiple_prev,
                     out_channels=base_channels * multiple_now,
                     kernel_size=kernel_size,
-                    stride=2,
+                    stride=1,
+                    padding=padding,
+                    bias=use_bias,
+                    norm_cfg=None,
+                    act_cfg=None,
+                    conv_cfg=dict(type='LBConvBN',
+                                    norm_type=norm_cfg['type'].lower(),
+                                    act=build_activation_layer(
+                                        dict(type='LeakyReLU', negative_slope=0.2))),
+                )]
+        else:
+            sequence += [
+                ConvModule(
+                    in_channels=base_channels * multiple_prev,
+                    out_channels=base_channels * multiple_now,
+                    kernel_size=kernel_size,
+                    stride=1,
                     padding=padding,
                     bias=use_bias,
                     norm_cfg=norm_cfg,
                     act_cfg=dict(type='LeakyReLU', negative_slope=0.2))
             ]
-        multiple_prev = multiple_now
-        multiple_now = min(2**num_conv, 8)
-        sequence += [
-            ConvModule(
-                in_channels=base_channels * multiple_prev,
-                out_channels=base_channels * multiple_now,
-                kernel_size=kernel_size,
-                stride=1,
-                padding=padding,
-                bias=use_bias,
-                norm_cfg=norm_cfg,
-                act_cfg=dict(type='LeakyReLU', negative_slope=0.2))
-        ]
 
         # output one-channel prediction map
         sequence += [
             build_conv_layer(
-                dict(type='Conv2d'),
+                dict(type='Conv2d') if not USE_LBCNN else dict(type='LBConvBN',
+                                                               act=None,
+                                                               norm_type=None,
+                                                               bias=True),
                 base_channels * multiple_now,
                 1,
                 kernel_size=kernel_size,
