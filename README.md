@@ -16,7 +16,7 @@ sh run.sh 0
 
 ## ImageNet
 
-The ImageNet codes highly reuse pytorch example. Run the following to train a resnet101 with LBCNN.
+The ImageNet codes highly reuse cifar10 example. Run the following to train a resnet101 with LBCNN.
 
 ```sh
 git checkout imagenet
